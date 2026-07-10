@@ -1,11 +1,25 @@
 import { neon } from '@neondatabase/serverless';
 
-const sql = neon(process.env.DATABASE_URL!);
+// 빌드 타임이 아닌 런타임에만 연결 (DATABASE_URL 없이 빌드 가능)
+function getDb() {
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error('DATABASE_URL environment variable is not set');
+  return neon(url);
+}
+
+// tagged template literal 형태로 사용 가능하도록 래핑
+const sql = new Proxy(
+  ((strings: TemplateStringsArray, ...values: any[]) => getDb()(strings, ...values)) as ReturnType<typeof neon>,
+  {}
+);
+
 export default sql;
 
-// DB 초기화 - 모든 테이블 생성
+// DB 초기화 - 모든 테이블 생성 (첫 배포 후 /api/init 호출 시 1회 실행)
 export async function initDb() {
-  await sql`
+  const db = getDb();
+
+  await db`
     CREATE TABLE IF NOT EXISTS user_settings (
       user_id TEXT PRIMARY KEY,
       api_key TEXT DEFAULT '',
@@ -18,7 +32,7 @@ export async function initDb() {
     )
   `;
 
-  await sql`
+  await db`
     CREATE TABLE IF NOT EXISTS tasks (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -39,9 +53,9 @@ export async function initDb() {
     )
   `;
 
-  await sql`CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks(user_id)`;
+  await db`CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks(user_id)`;
 
-  await sql`
+  await db`
     CREATE TABLE IF NOT EXISTS work_cards (
       card_id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -69,9 +83,9 @@ export async function initDb() {
     )
   `;
 
-  await sql`CREATE INDEX IF NOT EXISTS idx_work_cards_user_id ON work_cards(user_id)`;
+  await db`CREATE INDEX IF NOT EXISTS idx_work_cards_user_id ON work_cards(user_id)`;
 
-  await sql`
+  await db`
     CREATE TABLE IF NOT EXISTS shared_assets (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -86,9 +100,9 @@ export async function initDb() {
     )
   `;
 
-  await sql`CREATE INDEX IF NOT EXISTS idx_shared_assets_user_id ON shared_assets(user_id)`;
+  await db`CREATE INDEX IF NOT EXISTS idx_shared_assets_user_id ON shared_assets(user_id)`;
 
-  await sql`
+  await db`
     CREATE TABLE IF NOT EXISTS member_access (
       requester_id TEXT NOT NULL,
       target_email TEXT NOT NULL,
@@ -101,6 +115,6 @@ export async function initDb() {
     )
   `;
 
-  await sql`CREATE INDEX IF NOT EXISTS idx_member_access_target_email ON member_access(target_email)`;
-  await sql`CREATE INDEX IF NOT EXISTS idx_member_access_requester_id ON member_access(requester_id)`;
+  await db`CREATE INDEX IF NOT EXISTS idx_member_access_target_email ON member_access(target_email)`;
+  await db`CREATE INDEX IF NOT EXISTS idx_member_access_requester_id ON member_access(requester_id)`;
 }
