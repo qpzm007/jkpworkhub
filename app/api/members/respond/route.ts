@@ -1,6 +1,6 @@
 import { auth } from '@/lib/auth';
 import { NextResponse } from 'next/server';
-import sql from '@/lib/db';
+import prisma from '@/lib/db';
 
 // POST /api/members/respond — 부서원 요청 수락/거부
 export async function POST(req: Request) {
@@ -14,11 +14,19 @@ export async function POST(req: Request) {
 
   const status = action === 'approve' ? 'approved' : 'rejected';
 
-  await sql`
-    UPDATE member_access
-    SET status = ${status}, responded_at = NOW(), target_user_id = ${session.user.id}
-    WHERE requester_id = ${requester_id} AND target_email = ${session.user.email!}
-  `;
+  await prisma.memberAccess.update({
+    where: {
+      requesterId_targetEmail: {
+        requesterId: requester_id,
+        targetEmail: session.user.email!,
+      }
+    },
+    data: {
+      status,
+      respondedAt: new Date(),
+      targetUserId: session.user.id,
+    }
+  });
 
   return NextResponse.json({ success: true, status });
 }

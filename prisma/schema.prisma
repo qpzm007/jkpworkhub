@@ -1,0 +1,118 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// 1. 유저 설정 모델
+model UserSettings {
+  userId           String   @id
+  email            String?  @unique // 다른 부서원이 나를 이메일로 찾을 때 사용
+  apiKey           String   @default("")
+  aiContext        String   @default("")
+  customNames      String   @default("{}") // SQLite는 Json 타입을 지원하지 않으므로 String으로 저장하고 파싱해서 사용
+  userFolderSchema String   @default("{}") // SQLite는 Json 타입을 지원하지 않으므로 String으로 저장
+  bridgeUrl        String   @default("http://localhost:45679")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+// 2. 단일 업무 (Task / Order) 모델
+model Task {
+  id           String     @id @default(uuid())
+  userId       String
+  title        String
+  description  String?    // Editor.js JSON String 데이터 저장
+  status       String     // inbox, todo, inprogress, waiting, done
+  priority     String     @default("medium") // low, medium, high, urgent
+  department   String     @default("all")
+  assignee     String?
+  folder       String     @default("none")   // PARA 분류 (0_프로젝트, 1_영역, 2_자료, 3_보관소) 또는 아이젠하워 긴급도
+  deliveryDate String?    // 납기 마감일 (YYYY-MM-DD)
+  completedAt  DateTime?  // 완료 시간
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  files        TaskFile[]
+}
+
+// 3. 반복 업무 (Recurring Task) 템플릿 모델
+model RecurringTask {
+  id            String    @id @default(uuid())
+  userId        String
+  title         String
+  period        String    // daily, weekly, monthly
+  dayOfWeek     Int?      // weekly일 때 (0: 일요일 ~ 6: 토요일)
+  dayOfMonth    Int?      // monthly일 때 (1 ~ 31)
+  assignee      String?
+  department    String    @default("all")
+  isActive      Boolean   @default(true)
+  lastGenerated DateTime?
+  createdAt     DateTime  @default(now())
+}
+
+// 4. 업무와 연결된 로컬 파일 링크 모델
+model TaskFile {
+  id        String   @id @default(uuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  filePath  String   // 로컬 상대/절대 경로
+  fileName  String
+  createdAt DateTime @default(now())
+}
+
+// 5. 명함 (WorkCard) 모델
+model WorkCard {
+  cardId           String   @id @default(uuid())
+  userId           String
+  name             String?
+  company          String?
+  position         String?
+  mobile           String?
+  phone            String?
+  email            String?
+  fax              String?
+  address          String?
+  websiteUrl       String?
+  sns              String?
+  imageFrontBase64 String?
+  imageBackBase64  String?
+  tags             String?
+  relationship     String?
+  rating           Int      @default(0)
+  meetLocation     String?
+  memo             String?
+  isShared         Boolean  @default(false)
+  rawOcrText       String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+// 6. 공유 자료 (SharedAsset) 모델
+model SharedAsset {
+  id          String   @id @default(uuid())
+  userId      String
+  name        String?
+  assetNumber String?
+  category    String?
+  format      String?
+  ownerName   String?
+  status      String?
+  description String?
+  createdAt   DateTime @default(now())
+}
+
+// 7. 부서원 열람 권한 (MemberAccess) 모델
+model MemberAccess {
+  requesterId  String
+  targetEmail  String
+  targetUserId String?
+  displayName  String?
+  status       String   @default("pending") // pending, approved, rejected
+  requestedAt  DateTime @default(now())
+  respondedAt  DateTime?
+
+  @@id([requesterId, targetEmail])
+}

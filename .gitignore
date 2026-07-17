@@ -42,6 +42,10 @@ bridge-settings.json
 
 # typescript
 *.tsbuildinfo
-next-env.d.ts
-
 .vercel
+
+# sqlite
+*.db
+*.db-journal
+*.sqlite
+*.sqlite-journal

@@ -1,6 +1,6 @@
 import { auth } from '@/lib/auth';
 import { NextResponse } from 'next/server';
-import sql from '@/lib/db';
+import prisma from '@/lib/db';
 
 // GET /api/members/[userId]/tasks — 부서원 업무 읽기전용
 export async function GET(req: Request, { params }: { params: Promise<{ userId: string }> }) {
@@ -10,24 +10,38 @@ export async function GET(req: Request, { params }: { params: Promise<{ userId: 
   const { userId } = await params;
 
   // 내가 이 사람에게 승인된 접근 권한이 있는지 확인
-  const access = await sql`
-    SELECT status FROM member_access
-    WHERE requester_id = ${session.user.id} AND target_user_id = ${userId} AND status = 'approved'
-    LIMIT 1
-  `;
+  const access = await prisma.memberAccess.findFirst({
+    where: {
+      requesterId: session.user.id,
+      targetUserId: userId,
+      status: 'approved',
+    },
+  });
 
-  if (access.length === 0) {
+  if (!access) {
     return NextResponse.json({ error: '접근 권한이 없습니다. 상대방의 승인이 필요합니다.' }, { status: 403 });
   }
 
-  const tasks = await sql`
-    SELECT id, title, department, assignee, amount, status, delivery_date, items_count,
-           priority, folder, completed_at, created_at
-    FROM tasks
-    WHERE user_id = ${userId}
-    ORDER BY created_at DESC
-  `;
+  const tasks = await prisma.task.findMany({
+    where: { userId },
+    orderBy: { createdAt: 'desc' },
+  });
 
-  // 읽기전용: description(상세내용)과 timeline은 제외
-  return NextResponse.json(tasks);
+  // 읽기전용: description과 파일, 타임라인은 제외하고 기본 메타데이터만 호환되게 반환
+  const formattedTasks = tasks.map((t) => ({
+    id: t.id,
+    title: t.title,
+    department: t.department,
+    assignee: t.assignee,
+    status: t.status,
+    deliveryDate: t.deliveryDate,
+    delivery_date: t.deliveryDate,
+    priority: t.priority,
+    folder: t.folder,
+    completedAt: t.completedAt ? t.completedAt.getTime() : null,
+    completed_at: t.completedAt ? t.completedAt.getTime() : null,
+    created_at: t.createdAt.toISOString(),
+  }));
+
+  return NextResponse.json(formattedTasks);
 }
